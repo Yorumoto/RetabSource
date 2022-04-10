@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+
+import os
+import shutil
+import sys
+
+# CONTAINS_CHARACTERS = re.compile(r"\w+")
+
+def yes_no(question=""):
+	while True:
+		inp = input(f"{question} (Y/n) ").lower().strip()
+		# inp = "yes"
+
+		if inp in ['yes', '1', 'y']:
+			return True
+		elif inp in ['no', '0', 'n']:
+			return False
+
+def no_such_file(directory="", is_dir=False):
+	return f"\033[1;91m{'No such directory' if is_dir else 'No such file or directory'}\033[0m: {directory}"
+
+def main():
+	args = sys.argv[:]
+
+	if len(args) >= 1:
+		args.append("") # placeholder
+
+	directory = os.path.join(os.getcwd(), args[1])
+	tabbed_directory = os.path.join(directory, "tabbed")
+	directory = os.path.join(directory, "src")
+
+	if not os.path.isdir(directory):
+		print(no_such_file(directory, True))
+		return SystemExit(1)
+
+	tab_width = 4
+	
+	if os.path.isdir(tabbed_directory):
+		if not yes_no(f"\033[93mA directory named for 'tabbed' at {directory} exists, would you like to override it?\033[0m"):
+			return SystemExit(1)
+		else:
+			try:
+				os.rmdir(tabbed_directory)
+			except OSError:
+				shutil.rmtree(tabbed_directory)
+			print("Deleted current 'tabbed' directory")
+	
+	os.mkdir(tabbed_directory) 
+	total_changes = 0
+	
+	for (dirpath, _, fnames) in os.walk(directory):
+		for filename in fnames:
+			abs_filename = os.path.join(dirpath, filename)
+			# -1 isn't the last element of the list somehow... weird
+			filename = abs_filename[len(directory)+1:len(abs_filename)] # we can save that for the tabbed directory, so that it can be "cp"'ed easily
+			
+			try:
+				changes = 0
+
+				with open(abs_filename, "r") as file:
+					file_lines = file.readlines()[:]
+					output = []
+						
+					for line in file_lines:
+						# print(line[:-1] if line[-1]=="\n" else line)
+						tabstop = 0
+						
+						for i, letter in enumerate(line):
+							if letter != " ":
+								# print("tabstop", i // tab_width)
+								tabstop = (i - 0) // tab_width
+								break
+						
+						if tabstop > 0:
+							line = (chr(9) * tabstop) + line.strip() + "\n"
+							changes += 1
+							total_changes += 1
+
+						output.append(line)
+
+					tabbed_filename = os.path.join(tabbed_directory, filename)
+
+					try:
+						# mitsu's touch -p implementation 2022 edition police came no way
+
+						tpath = "/"
+						tsplit = tabbed_filename.split("/")
+
+						for s in tsplit[1:-1]:
+							tpath = os.path.join(tpath, s)
+							
+							if os.path.isdir(tpath):
+								continue
+
+							print(f"Outputting directory {tpath}:")
+							os.mkdir(tpath)
+
+						with open(tabbed_filename, "w+") as output_file:
+							for l in output:
+								output_file.write(l)
+
+					except FileNotFoundError:
+						print("Failed to output |", no_such_file(tabbed_filename))
+
+				if changes > 0:
+					print(f"Retabbed \033[32m{abs_filename}\033[0m with \033[1m{changes}\033[0m change(s)")
+			except FileNotFoundError:
+				print(no_such_file(abs_filename))
+			except PermissionError:
+				print(f"\033[93;1mPermission Error, file unreadable:\033[0m {directory}")
+
+	print(f"\033[92;1mYou should be able to replace the source code with the 'tabbed' directory.\n\033[1;2m{total_changes}\033[0m changes in total have been made.")	
+			
+if __name__ == '__main__': 
+	try:
+		main()
+	except KeyboardInterrupt:
+		print("Interrupt recieved")
